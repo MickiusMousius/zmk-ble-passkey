@@ -1,0 +1,6 @@
+description: BLE Passkey Sync Behavior
+compatible: "zmk,behavior-ble-passkey-sync"
+properties:
+  "#binding-cells":
+    type: int
+    const: 2

@@ -1,0 +1,8 @@
+/ {
+    behaviors {
+        bpsync: bpsync {
+            compatible = "zmk,behavior-ble-passkey-sync";
+            #binding-cells = <2>;
+        };
+    };
+};
