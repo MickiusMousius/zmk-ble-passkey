@@ -4,6 +4,9 @@
 #include <zephyr/logging/log.h>
 #include <zmk/events/ble_passkey_state_changed.h>
 #include <zmk/events/ble_pairing_complete.h>
+#include <zmk/events/ble_passkey_digits_changed.h>
+#include <zmk/events/keycode_state_changed.h>
+#include <zmk/hid.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -12,6 +15,59 @@ static struct bt_conn_auth_cb my_intercepted_cb;
 
 extern int __real_bt_conn_auth_cb_register(const struct bt_conn_auth_cb *cb);
 extern int __real_bt_conn_auth_passkey_entry(struct bt_conn *conn, unsigned int passkey);
+extern int __real_zmk_event_manager_raise(zmk_event_t *event);
+
+static bool pairing_active = false;
+static char passkey_buffer[7] = "";
+static uint8_t passkey_len = 0;
+
+static void clear_passkey_buffer(void) {
+    passkey_len = 0;
+    memset(passkey_buffer, 0, sizeof(passkey_buffer));
+    struct ble_passkey_digits_changed ev = { .digits_len = 0 };
+    memset(ev.passkey, 0, sizeof(ev.passkey));
+    raise_ble_passkey_digits_changed(ev);
+}
+
+int __wrap_zmk_event_manager_raise(zmk_event_t *event) {
+#if !IS_ENABLED(CONFIG_ZMK_SPLIT) || IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+    if (pairing_active && event->event == &zmk_event_zmk_keycode_state_changed) {
+        struct zmk_keycode_state_changed *kc = as_zmk_keycode_state_changed(event);
+        if (kc && kc->state) {
+            uint16_t key = kc->keycode;
+            uint8_t val = 0;
+            bool changed = false;
+
+            if (key >= HID_USAGE_KEY_KEYBOARD_1_AND_EXCLAMATION && key <= HID_USAGE_KEY_KEYBOARD_0_AND_RIGHT_PARENTHESIS) {
+                val = (key == HID_USAGE_KEY_KEYBOARD_0_AND_RIGHT_PARENTHESIS) ? 0 : (key - HID_USAGE_KEY_KEYBOARD_1_AND_EXCLAMATION + 1);
+                if (passkey_len < 6) {
+                    passkey_buffer[passkey_len++] = '0' + val;
+                    changed = true;
+                }
+            } else if (key >= HID_USAGE_KEY_KEYPAD_1_AND_END && key <= HID_USAGE_KEY_KEYPAD_0_AND_INSERT) {
+                val = (key == HID_USAGE_KEY_KEYPAD_0_AND_INSERT) ? 0 : (key - HID_USAGE_KEY_KEYPAD_1_AND_END + 1);
+                if (passkey_len < 6) {
+                    passkey_buffer[passkey_len++] = '0' + val;
+                    changed = true;
+                }
+            } else if (key == HID_USAGE_KEY_KEYBOARD_DELETE_BACKSPACE) {
+                if (passkey_len > 0) {
+                    passkey_len--;
+                    passkey_buffer[passkey_len] = '\0';
+                    changed = true;
+                }
+            }
+            
+            if (changed) {
+                struct ble_passkey_digits_changed digits_ev = { .digits_len = passkey_len };
+                strncpy(digits_ev.passkey, passkey_buffer, 7);
+                raise_ble_passkey_digits_changed(digits_ev);
+            }
+        }
+    }
+#endif
+    return __real_zmk_event_manager_raise(event);
+}
 
 #include <zmk/split/central.h>
 
@@ -37,6 +93,8 @@ static void sync_to_peripherals(uint32_t event_type, uint32_t state) {
 
 static void my_passkey_entry(struct bt_conn *conn) {
     LOG_DBG("Passkey entry intercepted: Active");
+    pairing_active = true;
+    clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = true});
     sync_to_peripherals(0, 1);
     
@@ -47,6 +105,8 @@ static void my_passkey_entry(struct bt_conn *conn) {
 
 static void my_cancel(struct bt_conn *conn) {
     LOG_DBG("Passkey entry intercepted: Cancelled");
+    pairing_active = false;
+    clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
     
@@ -71,6 +131,8 @@ int __wrap_bt_conn_auth_cb_register(const struct bt_conn_auth_cb *cb) {
 
 int __wrap_bt_conn_auth_passkey_entry(struct bt_conn *conn, unsigned int passkey) {
     LOG_DBG("Passkey entry intercepted: Submitted");
+    pairing_active = false;
+    clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
     
@@ -79,6 +141,8 @@ int __wrap_bt_conn_auth_passkey_entry(struct bt_conn *conn, unsigned int passkey
 
 static void my_pairing_complete(struct bt_conn *conn, bool bonded) {
     LOG_DBG("Pairing complete intercepted");
+    pairing_active = false;
+    clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
     raise_ble_pairing_complete((struct ble_pairing_complete){.bonded = bonded});
@@ -87,6 +151,8 @@ static void my_pairing_complete(struct bt_conn *conn, bool bonded) {
 
 static void my_pairing_failed(struct bt_conn *conn, enum bt_security_err reason) {
     LOG_DBG("Pairing failed intercepted");
+    pairing_active = false;
+    clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
 }
