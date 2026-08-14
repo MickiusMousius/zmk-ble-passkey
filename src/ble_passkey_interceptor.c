@@ -50,14 +50,7 @@ int __wrap_zmk_event_manager_raise(zmk_event_t *event) {
                     passkey_buffer[passkey_len++] = '0' + val;
                     changed = true;
                 }
-            } else if (key == HID_USAGE_KEY_KEYBOARD_DELETE_BACKSPACE) {
-                if (passkey_len > 0) {
-                    passkey_len--;
-                    passkey_buffer[passkey_len] = '\0';
-                    changed = true;
-                }
             }
-            
             if (changed) {
                 struct ble_passkey_digits_changed digits_ev = { .digits_len = passkey_len };
                 strncpy(digits_ev.passkey, passkey_buffer, 7);
