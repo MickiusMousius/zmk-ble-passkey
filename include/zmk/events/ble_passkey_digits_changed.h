@@ -8,4 +8,5 @@ struct ble_passkey_digits_changed {
     char passkey[7];
 };
 
+
 ZMK_EVENT_DECLARE(ble_passkey_digits_changed);

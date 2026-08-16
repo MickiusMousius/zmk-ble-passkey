@@ -7,4 +7,5 @@ struct ble_passkey_state_changed {
     bool active;
 };
 
+
 ZMK_EVENT_DECLARE(ble_passkey_state_changed);
