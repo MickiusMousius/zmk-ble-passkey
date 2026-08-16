@@ -213,6 +213,8 @@ static void my_pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
     clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
+    raise_ble_pairing_complete((struct ble_pairing_complete){.bonded = false});
+    sync_to_peripherals(1, 0);
 
     auto_layer_deactivate();
 }
