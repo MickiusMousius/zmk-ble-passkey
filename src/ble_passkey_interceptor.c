@@ -205,8 +205,24 @@ static struct bt_conn_auth_info_cb my_auth_info_cb = {
     .pairing_failed = my_pairing_failed,
 };
 
+static void my_disconnected(struct bt_conn *conn, uint8_t reason) {
+    if (pairing_active) {
+        LOG_DBG("Disconnected while pairing intercepted");
+        pairing_active = false;
+        clear_passkey_buffer();
+        raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
+        sync_to_peripherals(0, 0);
+        auto_layer_deactivate();
+    }
+}
+
+static struct bt_conn_cb conn_callbacks = {
+    .disconnected = my_disconnected,
+};
+
 static int passkey_interceptor_init(void) {
     bt_conn_auth_info_cb_register(&my_auth_info_cb);
+    bt_conn_cb_register(&conn_callbacks);
     return 0;
 }
 SYS_INIT(passkey_interceptor_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
