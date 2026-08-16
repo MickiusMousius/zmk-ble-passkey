@@ -7,8 +7,48 @@
 #include <zmk/events/ble_passkey_digits_changed.h>
 #include <zmk/events/keycode_state_changed.h>
 #include <zmk/hid.h>
+#include <zmk/keymap.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+
+#if DT_HAS_COMPAT_STATUS_OKAY(zmk_ble_passkey_layer)
+#define BPL_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(zmk_ble_passkey_layer)
+static const uint8_t passkey_layer = DT_PROP(BPL_NODE, passkey_layer);
+static const uint8_t exclude_layers[] = DT_PROP_OR(BPL_NODE, exclude_layers, {});
+#endif
+
+static bool layer_was_toggled = false;
+
+static void auto_layer_activate(void) {
+#if DT_HAS_COMPAT_STATUS_OKAY(zmk_ble_passkey_layer)
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || !IS_ENABLED(CONFIG_ZMK_SPLIT)
+    bool should_toggle = true;
+    for (int i = 0; i < ARRAY_SIZE(exclude_layers); i++) {
+        if (zmk_keymap_layer_active(exclude_layers[i])) {
+            should_toggle = false;
+            break;
+        }
+    }
+    if (should_toggle) {
+        LOG_DBG("Auto-toggling passkey layer %d", passkey_layer);
+        zmk_keymap_layer_activate(passkey_layer);
+        layer_was_toggled = true;
+    }
+#endif
+#endif
+}
+
+static void auto_layer_deactivate(void) {
+#if DT_HAS_COMPAT_STATUS_OKAY(zmk_ble_passkey_layer)
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || !IS_ENABLED(CONFIG_ZMK_SPLIT)
+    if (layer_was_toggled) {
+        LOG_DBG("Deactivating passkey layer %d", passkey_layer);
+        zmk_keymap_layer_deactivate(passkey_layer);
+        layer_was_toggled = false;
+    }
+#endif
+#endif
+}
 
 static const struct bt_conn_auth_cb *zmk_original_cb = NULL;
 static struct bt_conn_auth_cb my_intercepted_cb;
@@ -91,6 +131,8 @@ static void my_passkey_entry(struct bt_conn *conn) {
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = true});
     sync_to_peripherals(0, 1);
     
+    auto_layer_activate();
+    
     if (zmk_original_cb && zmk_original_cb->passkey_entry) {
         zmk_original_cb->passkey_entry(conn);
     }
@@ -102,6 +144,8 @@ static void my_cancel(struct bt_conn *conn) {
     clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
+    
+    auto_layer_deactivate();
     
     if (zmk_original_cb && zmk_original_cb->cancel) {
         zmk_original_cb->cancel(conn);
@@ -129,6 +173,8 @@ int __wrap_bt_conn_auth_passkey_entry(struct bt_conn *conn, unsigned int passkey
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
     
+    auto_layer_deactivate();
+    
     return __real_bt_conn_auth_passkey_entry(conn, passkey);
 }
 
@@ -140,6 +186,8 @@ static void my_pairing_complete(struct bt_conn *conn, bool bonded) {
     sync_to_peripherals(0, 0);
     raise_ble_pairing_complete((struct ble_pairing_complete){.bonded = bonded});
     sync_to_peripherals(1, bonded ? 1 : 0);
+    
+    auto_layer_deactivate();
 }
 
 static void my_pairing_failed(struct bt_conn *conn, enum bt_security_err reason) {
@@ -148,6 +196,8 @@ static void my_pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
     clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
+    
+    auto_layer_deactivate();
 }
 
 static struct bt_conn_auth_info_cb my_auth_info_cb = {

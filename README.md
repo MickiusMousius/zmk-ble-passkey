@@ -8,6 +8,7 @@ This repository is a Zephyr module designed to be used with [ZMK Firmware](https
 - **Keystroke Capture**: Automatically monitors numeric keystrokes (0-9 and Numpad 0-9) during the pairing process to build up the typed passkey in real-time.
 - **Split Keyboard Support**: Seamlessly syncs pairing state, passkey completion, and bonded status from the central half to peripheral halves over BLE using a custom ZMK behavior (`zmk,behavior-ble-passkey-sync`).
 - **Event System Integration**: Broadcasts state changes and typed digits to ZMK's native event system, allowing you to trigger custom display widgets or animations during Bluetooth pairing.
+- **Auto-Layer Toggling**: Automatically activates a specific keymap layer (such as a dedicated NumPad layer) when pairing starts, and automatically deactivates it when pairing completes or is cancelled.
 
 # Installation
 
@@ -56,6 +57,24 @@ To enable split keyboard synchronization for passkey events (so your peripheral 
 ```
 
 When this node is present, the central half will automatically find it and use it to sync pairing state (active/inactive) and pairing completion (bonded status) to all connected peripherals.
+
+### Auto-Layer Toggling
+
+To use the auto-layer toggling feature, you can define a `zmk,ble-passkey-layer` node in the root of your central devicetree (or `.keymap`). This allows the keyboard to automatically jump to a specific layer (like a NumPad) when it's time to enter a passkey.
+
+```dts
+/ {
+    ble_passkey_layer {
+        compatible = "zmk,ble-passkey-layer";
+        // The ID of the layer to toggle on during pairing
+        passkey-layer = <3>; 
+        // (Optional) If any of these layers are active, the auto-toggle will NOT occur
+        exclude-layers = <4 5>; 
+    };
+};
+```
+
+When this node is present, the interceptor will automatically activate your `passkey-layer` as soon as pairing starts, and automatically deactivate it when pairing concludes or the connection drops. If you are already on a layer listed in `exclude-layers`, the auto-toggle is aborted so it doesn't disrupt your workflow.
 
 # Using the Event System
 

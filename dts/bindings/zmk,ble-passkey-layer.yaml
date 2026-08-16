@@ -1,0 +1,12 @@
+description: "BLE Passkey auto-layer toggle settings"
+compatible: "zmk,ble-passkey-layer"
+
+properties:
+  passkey-layer:
+    type: int
+    required: true
+    description: "The layer ID to activate when passkey entry begins"
+  exclude-layers:
+    type: array
+    required: false
+    description: "List of layer IDs that, if active, will prevent the passkey layer from activating"
