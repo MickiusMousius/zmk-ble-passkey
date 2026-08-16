@@ -12,6 +12,7 @@
 
 #include <zmk/events/ble_passkey_state_changed.h>
 #include <zmk/events/ble_pairing_complete.h>
+#include <zmk/events/ble_passkey_digits_changed.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -34,6 +35,11 @@ static int behavior_ble_passkey_sync_process(struct zmk_behavior_binding *bindin
         raise_ble_pairing_complete((struct ble_pairing_complete){
             .bonded = (bool)binding->param2
         });
+    } else if (binding->param1 == 2) {
+        LOG_DBG("Peripheral: Relaying ble_passkey_digits_changed (len: %d)", binding->param2);
+        struct ble_passkey_digits_changed digits_ev = { .digits_len = binding->param2 };
+        memset(digits_ev.passkey, 0, sizeof(digits_ev.passkey)); // The peripheral doesn't need the actual passkey string, just the length!
+        raise_ble_passkey_digits_changed(digits_ev);
     }
 #endif
     return 0;

@@ -61,12 +61,15 @@ static bool pairing_active = false;
 static char passkey_buffer[7] = "";
 static uint8_t passkey_len = 0;
 
+static void sync_to_peripherals(uint32_t event_type, uint32_t state);
+
 static void clear_passkey_buffer(void) {
     passkey_len = 0;
     memset(passkey_buffer, 0, sizeof(passkey_buffer));
     struct ble_passkey_digits_changed ev = { .digits_len = 0 };
     memset(ev.passkey, 0, sizeof(ev.passkey));
     raise_ble_passkey_digits_changed(ev);
+    sync_to_peripherals(2, 0);
 }
 
 int __wrap_zmk_event_manager_raise(zmk_event_t *event) {
@@ -95,6 +98,7 @@ int __wrap_zmk_event_manager_raise(zmk_event_t *event) {
                 struct ble_passkey_digits_changed digits_ev = { .digits_len = passkey_len };
                 strncpy(digits_ev.passkey, passkey_buffer, 7);
                 raise_ble_passkey_digits_changed(digits_ev);
+                sync_to_peripherals(2, passkey_len);
             }
         }
     }
