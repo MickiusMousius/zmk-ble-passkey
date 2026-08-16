@@ -60,7 +60,9 @@ When this node is present, the central half will automatically find it and use i
 
 ### Auto-Layer Toggling
 
-To use the auto-layer toggling feature, you can define a `zmk,ble-passkey-layer` node in the root of your central devicetree (or `.keymap`). This allows the keyboard to automatically jump to a specific layer (like a NumPad) when it's time to enter a passkey.
+One of the most useful features of this module is the ability to automatically switch to a specific keymap layer during pairing. Since passkeys are always numeric, you can use this feature to automatically expose a number pad (or a layer containing numbers) on your keyboard as soon as a passkey is required.
+
+To use the auto-layer toggling feature, you can define a `zmk,ble-passkey-layer` node in the root of your central devicetree (or `.keymap`):
 
 ```dts
 / {
@@ -75,6 +77,25 @@ To use the auto-layer toggling feature, you can define a `zmk,ble-passkey-layer`
 ```
 
 When this node is present, the interceptor will automatically activate your `passkey-layer` as soon as pairing starts, and automatically deactivate it when pairing concludes or the connection drops. If you are already on a layer listed in `exclude-layers`, the auto-toggle is aborted so it doesn't disrupt your workflow.
+
+#### Adding Visual Indicators with PK Underglow
+
+If you are using the [zmk-pk-underglow](https://github.com/MickiusMousius/zmk-pk-underglow) module, you can combine its layer indicator feature with this module's auto-layer toggling to create a dedicated pairing visual (e.g., illuminating the number pad keys, blinking an enter key, and playing a fireworks animation upon successful pairing).
+
+To do this, simply add the `ble-pairing-layer;` property to your designated pairing layer in your underglow configuration:
+
+```dts
+&pk_underglow {
+    // ...
+    layer_ble_pairing {
+        layer-id = <3>; // Matches the passkey-layer above
+        ble-pairing-layer; // Marks this layer as the dedicated pairing indicator layer
+        bindings = < ... >;
+    };
+};
+```
+
+When pairing starts, `zmk-ble-passkey` will automatically activate the layer. Then, `zmk-pk-underglow` will detect that a `ble-pairing-layer` is active and force a transient override on the underglow hardware (even if the user had underglow disabled), locking the brightness and rendering your indicator layout. Upon a successful pair, it will seamlessly play the fireworks animation across both the central and peripheral halves!
 
 # Using the Event System
 
