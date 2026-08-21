@@ -151,6 +151,7 @@ static void passkey_work_handler(struct k_work *w) {
     auto_layer_activate();
 }
 
+
 static void my_passkey_entry(struct bt_conn *conn) {
     LOG_DBG("Passkey entry intercepted: Active");
     k_work_submit(&passkey_work);
@@ -168,6 +169,7 @@ static void cancel_work_handler(struct k_work *w) {
     sync_to_peripherals(0, 0);
     auto_layer_deactivate();
 }
+
 
 static void my_cancel(struct bt_conn *conn) {
     LOG_DBG("Passkey entry intercepted: Cancelled");
@@ -212,6 +214,7 @@ static void complete_work_handler(struct k_work *w) {
     auto_layer_deactivate();
 }
 
+
 static void my_pairing_complete(struct bt_conn *conn, bool bonded) {
     LOG_DBG("Pairing complete intercepted");
     last_bonded = bonded;
@@ -228,6 +231,7 @@ static void failed_work_handler(struct k_work *w) {
     sync_to_peripherals(1, 0);
     auto_layer_deactivate();
 }
+
 
 static void my_pairing_failed(struct bt_conn *conn, enum bt_security_err reason) {
     LOG_DBG("Pairing failed intercepted");
@@ -250,6 +254,7 @@ static void disconnect_work_handler(struct k_work *w) {
         auto_layer_deactivate();
     }
 }
+
 
 static void my_disconnected(struct bt_conn *conn, uint8_t reason) {
     if (pairing_active) {
