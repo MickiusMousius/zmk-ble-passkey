@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2025
+ *
+ * SPDX-License-Identifier: MIT
+ *
+ * @file ble_pairing_complete.h
+ * @brief Event declaration for BLE pairing completion.
+ */
+
 #pragma once
 
 #include <zephyr/kernel.h>

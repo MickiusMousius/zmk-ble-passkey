@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2025
+ *
+ * SPDX-License-Identifier: MIT
+ *
+ * @file ble_passkey_state_changed.h
+ * @brief Event declaration for BLE passkey entry state changes.
+ */
+
 #pragma once
 
 #include <zephyr/kernel.h>
