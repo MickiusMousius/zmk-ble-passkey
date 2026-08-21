@@ -31,12 +31,17 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 /*                            STATE AND GLOBALS                              */
 /* ========================================================================= */
 #if DT_HAS_COMPAT_STATUS_OKAY(zmk_ble_passkey_layer)
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || !IS_ENABLED(CONFIG_ZMK_SPLIT)
 #define BPL_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(zmk_ble_passkey_layer)
 static const uint8_t passkey_layer = DT_PROP(BPL_NODE, passkey_layer);
 static const uint8_t exclude_layers[] = DT_PROP_OR(BPL_NODE, exclude_layers, {});
 #endif
+#endif
 
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || !IS_ENABLED(CONFIG_ZMK_SPLIT)
 static bool layer_was_toggled = false;
+#endif
+
 
 /* ========================================================================= */
 /*                            AUTO-LAYER LOGIC                               */
