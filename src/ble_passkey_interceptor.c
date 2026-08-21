@@ -127,7 +127,7 @@ static void sync_to_peripherals(uint32_t event_type, uint32_t state) {
         .position = 0,
         .timestamp = k_uptime_get(),
     };
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < ZMK_SPLIT_CENTRAL_PERIPHERAL_COUNT; i++) {
         zmk_split_central_invoke_behavior(i, &binding, event, true);
         zmk_split_central_invoke_behavior(i, &binding, event, false);
     }
