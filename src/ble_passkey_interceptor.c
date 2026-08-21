@@ -136,14 +136,24 @@ static void sync_to_peripherals(uint32_t event_type, uint32_t state) {
 }
 
 
-static void my_passkey_entry(struct bt_conn *conn) {
-    LOG_DBG("Passkey entry intercepted: Active");
+static struct k_work passkey_work;
+static struct k_work cancel_work;
+static struct k_work complete_work;
+static struct k_work failed_work;
+static struct k_work disconnect_work;
+static bool last_bonded = false;
+
+static void passkey_work_handler(struct k_work *w) {
     pairing_active = true;
     clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = true});
     sync_to_peripherals(0, 1);
-
     auto_layer_activate();
+}
+
+static void my_passkey_entry(struct bt_conn *conn) {
+    LOG_DBG("Passkey entry intercepted: Active");
+    k_work_submit(&passkey_work);
 
     if (zmk_original_cb && zmk_original_cb->passkey_entry) {
         zmk_original_cb->passkey_entry(conn);
@@ -151,14 +161,17 @@ static void my_passkey_entry(struct bt_conn *conn) {
 }
 
 
-static void my_cancel(struct bt_conn *conn) {
-    LOG_DBG("Passkey entry intercepted: Cancelled");
+static void cancel_work_handler(struct k_work *w) {
     pairing_active = false;
     clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
-
     auto_layer_deactivate();
+}
+
+static void my_cancel(struct bt_conn *conn) {
+    LOG_DBG("Passkey entry intercepted: Cancelled");
+    k_work_submit(&cancel_work);
 
     if (zmk_original_cb && zmk_original_cb->cancel) {
         zmk_original_cb->cancel(conn);
@@ -183,40 +196,42 @@ int __wrap_bt_conn_auth_cb_register(const struct bt_conn_auth_cb *cb) {
 
 int __wrap_bt_conn_auth_passkey_entry(struct bt_conn *conn, unsigned int passkey) {
     LOG_DBG("Passkey entry intercepted: Submitted");
-    pairing_active = false;
-    clear_passkey_buffer();
-    raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
-    sync_to_peripherals(0, 0);
-
-    auto_layer_deactivate();
+    k_work_submit(&cancel_work);
 
     return __real_bt_conn_auth_passkey_entry(conn, passkey);
 }
 
 
-static void my_pairing_complete(struct bt_conn *conn, bool bonded) {
-    LOG_DBG("Pairing complete intercepted");
+static void complete_work_handler(struct k_work *w) {
     pairing_active = false;
     clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
-    raise_ble_pairing_complete((struct ble_pairing_complete){.bonded = bonded});
-    sync_to_peripherals(1, bonded ? 1 : 0);
-
+    raise_ble_pairing_complete((struct ble_pairing_complete){.bonded = last_bonded});
+    sync_to_peripherals(1, last_bonded ? 1 : 0);
     auto_layer_deactivate();
 }
 
+static void my_pairing_complete(struct bt_conn *conn, bool bonded) {
+    LOG_DBG("Pairing complete intercepted");
+    last_bonded = bonded;
+    k_work_submit(&complete_work);
+}
 
-static void my_pairing_failed(struct bt_conn *conn, enum bt_security_err reason) {
-    LOG_DBG("Pairing failed intercepted");
+
+static void failed_work_handler(struct k_work *w) {
     pairing_active = false;
     clear_passkey_buffer();
     raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
     sync_to_peripherals(0, 0);
     raise_ble_pairing_complete((struct ble_pairing_complete){.bonded = false});
     sync_to_peripherals(1, 0);
-
     auto_layer_deactivate();
+}
+
+static void my_pairing_failed(struct bt_conn *conn, enum bt_security_err reason) {
+    LOG_DBG("Pairing failed intercepted");
+    k_work_submit(&failed_work);
 }
 
 
@@ -226,14 +241,20 @@ static struct bt_conn_auth_info_cb my_auth_info_cb = {
 };
 
 
-static void my_disconnected(struct bt_conn *conn, uint8_t reason) {
+static void disconnect_work_handler(struct k_work *w) {
     if (pairing_active) {
-        LOG_DBG("Disconnected while pairing intercepted");
         pairing_active = false;
         clear_passkey_buffer();
         raise_ble_passkey_state_changed((struct ble_passkey_state_changed){.active = false});
         sync_to_peripherals(0, 0);
         auto_layer_deactivate();
+    }
+}
+
+static void my_disconnected(struct bt_conn *conn, uint8_t reason) {
+    if (pairing_active) {
+        LOG_DBG("Disconnected while pairing intercepted");
+        k_work_submit(&disconnect_work);
     }
 }
 
@@ -244,6 +265,12 @@ static struct bt_conn_cb conn_callbacks = {
 
 
 static int passkey_interceptor_init(void) {
+    k_work_init(&passkey_work, passkey_work_handler);
+    k_work_init(&cancel_work, cancel_work_handler);
+    k_work_init(&complete_work, complete_work_handler);
+    k_work_init(&failed_work, failed_work_handler);
+    k_work_init(&disconnect_work, disconnect_work_handler);
+
     bt_conn_auth_info_cb_register(&my_auth_info_cb);
     bt_conn_cb_register(&conn_callbacks);
     return 0;
